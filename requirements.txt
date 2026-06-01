@@ -1,0 +1,9 @@
+# 配置文件解析
+PyYAML>=6.0
+
+# 单元测试
+pytest>=8.0
+
+# 注意：
+# 1. PyTorch 不在这里强行锁定版本，因为它和 CUDA 版本强相关。
+# 2. 运行 stress-test / comm-test 前，请按目标机器的 CUDA 环境单独安装匹配的 torch。

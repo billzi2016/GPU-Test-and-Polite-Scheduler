@@ -1,0 +1,6 @@
+gpus:
+  - 0
+matrix_size: 8192
+dtype: float32
+status_every: 10
+iterations: 0

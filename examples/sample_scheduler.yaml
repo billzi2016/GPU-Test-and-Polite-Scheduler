@@ -1,0 +1,11 @@
+poll_interval_seconds: 60
+gpu_busy_threshold_percent: 5
+watchdog_session_name: gpu-watchdog
+log_dir: logs
+auto_restart: true
+tasks:
+  - name: example-task
+    gpu_id: 0
+    command: "bash examples/example_resume_task.sh"
+    workdir: "."
+    log_file: "logs/example-task.log"

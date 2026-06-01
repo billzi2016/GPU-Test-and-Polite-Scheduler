@@ -1,0 +1,6 @@
+gpus:
+  - 0
+  - 1
+warmup_iters: 5
+measure_iters: 20
+numel: 16777216
