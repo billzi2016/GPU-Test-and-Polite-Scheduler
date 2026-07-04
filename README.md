@@ -1,266 +1,264 @@
 # GPU-Test-and-Polite-Scheduler
 
-一个面向共享 GPU 服务器的新手友好工具集，用来做两件事：
+A beginner-friendly toolkit for shared GPU servers. It focuses on two practical jobs:
 
-1. 检查 GPU 环境是否正常，顺手做压测和多卡通信测试
-2. 用 `tmux` 托管长任务，并在共享环境里尽量“礼貌”地等待空闲 GPU 再恢复任务
+1. Check whether the GPU environment is healthy, with optional stress tests and multi-GPU communication tests.
+2. Keep long-running jobs under `tmux`, and politely wait for idle GPUs before resuming work in a shared environment.
 
-如果你经常遇到这些问题，这个项目就是给你的：
+This project is useful if you often run into questions like:
 
-- 不确定机器上的 CUDA、驱动、GPU 拓扑是不是正常
-- 想先压一压卡，看看温度、功耗、利用率稳不稳
-- 想跑多卡任务，但不确定卡之间通信有没有问题
-- 想把长时间训练/采样任务丢到后台跑，又不想和别人抢卡
+- whether CUDA, drivers, and GPU topology are configured correctly
+- whether a GPU can sustain load without temperature, power, OOM, or dropout issues
+- whether multi-GPU communication is working as expected
+- how to run long training or sampling jobs in the background without aggressively competing for shared GPUs
 
-## 这个项目能做什么
+## What This Project Does
 
-### 1. 环境检查
+### 1. Environment Checks
 
-运行一次就能看到：
+One command shows:
 
 - `nvidia-smi`
 - `nvidia-smi topo -m`
-- 驱动版本
-- CUDA 版本
-- 可见 GPU 列表
-- `nvidia-smi`、`tmux`、`python3` 是否可用
+- driver version
+- CUDA version
+- visible GPU list
+- whether `nvidia-smi`, `tmux`, and `python3` are available
 
-### 2. GPU 压力测试
+### 2. GPU Stress Tests
 
-对指定 GPU 持续做矩阵乘法，让你观察：
+The stress test continuously runs matrix multiplication on selected GPUs, so you can observe:
 
-- GPU 利用率能不能稳定拉高
-- 温度会不会持续升高
-- 有没有掉卡、报错、OOM 之类的问题
+- whether GPU utilization can stay high
+- whether temperature keeps rising
+- whether the machine reports GPU dropouts, errors, or OOM failures
 
-### 3. 多卡通信测试
+### 3. Multi-GPU Communication Tests
 
-对多张 GPU 做基础 `all_reduce` 通信测试，用来快速判断：
+The communication test runs a basic `all_reduce` test across multiple GPUs to quickly check:
 
-- 多卡能不能正常协同
-- 通信是否明显异常
-- topo 和通信结果是否对得上
+- whether multiple GPUs can cooperate normally
+- whether communication looks obviously abnormal
+- whether topology and communication behavior line up
 
-### 4. 礼貌型后台调度
+### 4. Polite Background Scheduling
 
-你的任务如果异常退出，调度器不会立刻强行重启，而是先看目标 GPU 当前是否忙碌：
+If a task exits unexpectedly, the scheduler does not immediately force a restart. It first checks whether the target GPU is busy:
 
-- 利用率高于阈值：先等待
-- 利用率低于等于阈值：再恢复任务
+- utilization above the threshold: wait
+- utilization at or below the threshold: resume the task
 
-这比较适合共享服务器，不容易和别人直接撞资源。
+This behavior is designed for shared servers, where jobs should avoid directly colliding with other users.
 
-## 适合谁
+## Who This Is For
 
-这个项目适合：
+This project is suitable for:
 
-- 实验室或团队共享 GPU 服务器的用户
-- 想先验卡、再跑任务的人
-- 有长时间训练/采样任务，需要 `tmux` 守护的人
+- users of lab or team shared GPU servers
+- people who want to validate GPUs before running real jobs
+- long-running training or sampling tasks that need `tmux` supervision
 
-这个项目不适合：
+This project is not intended for:
 
-- 需要集群级调度的人
-- 需要 Slurm / Kubernetes / Ray 这类完整平台的人
-- 想做多机统一资源管理的人
+- cluster-level scheduling
+- full platforms such as Slurm, Kubernetes, or Ray
+- multi-machine unified resource management
 
-## 运行环境
+## Runtime Requirements
 
 - Linux
 - NVIDIA GPU
-- NVIDIA 驱动
+- NVIDIA driver
 - `nvidia-smi`
 - `tmux`
 - `python3`
 
-Python 基础依赖：
+Basic Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-注意：
+Notes:
 
-- `torch` 没有写死在 `requirements.txt` 里
-- 原因是 `torch` 和 CUDA 版本强相关
-- 你需要按自己机器的 CUDA 环境单独安装匹配版本的 PyTorch
+- `torch` is not pinned in `requirements.txt`
+- PyTorch is tightly coupled to CUDA versions
+- install the PyTorch build that matches your machine's CUDA environment
 
-## 给新手的最短上手路径
+## Shortest Path for New Users
 
-如果你是第一次用，建议按这个顺序来。
+If this is your first time using the project, follow this order.
 
-### 第一步：先检查环境
+### Step 1: Check the Environment
 
 ```bash
 bash scripts/test_env.sh
 ```
 
-你会看到：
+You will see:
 
-- 当前 `nvidia-smi`
-- 当前 `nvidia-smi topo -m`
-- GPU 摘要信息
+- current `nvidia-smi`
+- current `nvidia-smi topo -m`
+- GPU summary information
 
-如果这一步都不正常，就先不要急着跑训练。
+If this step fails, fix the environment before starting training.
 
-### 第二步：做单卡压测
+### Step 2: Run a Single-GPU Stress Test
 
 ```bash
 bash scripts/start_stress_test.sh --gpus 0
 ```
 
-另开一个终端观察：
+Open another terminal and watch:
 
 ```bash
 watch -n 1 nvidia-smi
 ```
 
-你主要看三件事：
+Focus on:
 
-- `GPU-Util` 能不能稳定接近高负载
-- 温度是否持续上升
-- 程序是否很快报错退出
+- whether `GPU-Util` stays near high load
+- whether temperature keeps rising
+- whether the program exits quickly with errors
 
-### 第三步：做多卡通信测试
+### Step 3: Run a Multi-GPU Communication Test
 
-如果你要用多卡，再跑：
+If you plan to use multiple GPUs, run:
 
 ```bash
 bash scripts/start_comm_test.sh --gpus 0,1
 ```
 
-这一步会先打印 topo，再跑通信测试。
+This prints topology first, then runs the communication test.
 
-### 第四步：最后再上调度器
+### Step 4: Start the Scheduler
 
-先看示例配置：
+Review the example config first:
 
 - [configs/scheduler.example.yaml](./configs/scheduler.example.yaml)
 
-再启动 watchdog：
+Then start the watchdog:
 
 ```bash
 bash scripts/start_watchdog.sh configs/scheduler.example.yaml
 ```
 
-默认会把 watchdog 自己也放进 `tmux` 里后台运行。
+By default, the watchdog itself is also placed in a background `tmux` session.
 
-## 一个典型使用流程
+## Typical Workflow
 
-你可以把这个项目理解成下面这个流程：
+You can think of the project as this workflow:
 
-1. 用 `test_env.sh` 看机器是不是正常
-2. 用 `start_stress_test.sh` 看 GPU 能不能稳定跑
-3. 用 `start_comm_test.sh` 看多卡通信是不是正常
-4. 把你自己的任务改造成“支持断点续传”
-5. 用 `start_watchdog.sh` 托管任务
-6. 让任务在共享环境里按“空闲就跑、有人就让、挂了再恢复”的方式运行
+1. Use `test_env.sh` to check whether the machine is healthy.
+2. Use `start_stress_test.sh` to see whether GPUs run stably.
+3. Use `start_comm_test.sh` to check multi-GPU communication.
+4. Make your own task resume-friendly.
+5. Use `start_watchdog.sh` to supervise the task.
+6. Let the task run in a shared environment with an "run when idle, yield when busy, resume after failure" pattern.
 
-## 如何让你自己的任务接入调度器
+## Connecting Your Own Task to the Scheduler
 
-重点不是“把命令丢给 tmux”，而是让你的任务本身支持恢复。
+The key is not simply putting a command into `tmux`. Your task itself should support resuming.
 
-你自己的任务最好满足这三点：
+Ideally, your task should:
 
-1. 定期保存 checkpoint
-2. 保存时用临时文件 + 原子替换，避免写坏文件
-3. 启动时自动读取最近一次有效 checkpoint
+1. save checkpoints regularly
+2. save through a temporary file plus atomic replacement to avoid corrupted checkpoint files
+3. automatically load the latest valid checkpoint on startup
 
-可以先参考：
+References:
 
 - [examples/example_atomic_task.py](./examples/example_atomic_task.py)
 - [examples/example_resume_task.sh](./examples/example_resume_task.sh)
 - [docs/atomic_task_spec.md](./docs/atomic_task_spec.md)
 
-## 配置文件说明
+## Configuration Files
 
-目前主要有三类示例配置：
+The repository currently provides three main example configs:
 
-- [configs/stress_test.example.yaml](./configs/stress_test.example.yaml)：压测配置
-- [configs/comm_test.example.yaml](./configs/comm_test.example.yaml)：通信测试配置
-- [configs/scheduler.example.yaml](./configs/scheduler.example.yaml)：调度配置
+- [configs/stress_test.example.yaml](./configs/stress_test.example.yaml): stress test config
+- [configs/comm_test.example.yaml](./configs/comm_test.example.yaml): communication test config
+- [configs/scheduler.example.yaml](./configs/scheduler.example.yaml): scheduler config
 
-调度配置里最重要的字段通常是：
+Important scheduler fields:
 
-- `tasks`：要托管的任务列表
-- `gpu_id`：任务绑定的目标 GPU
-- `command`：真正执行的命令
-- `poll_interval_seconds`：watchdog 轮询间隔
-- `gpu_busy_threshold_percent`：判定“这张卡可能有人在用”的阈值
+- `tasks`: list of supervised tasks
+- `gpu_id`: target GPU bound to a task
+- `command`: command to execute
+- `poll_interval_seconds`: watchdog polling interval
+- `gpu_busy_threshold_percent`: threshold for deciding whether a GPU may be in use
 
-## Docker 支持
+## Docker Support
 
-仓库已经包含：
+The repository includes:
 
 - [Dockerfile](./Dockerfile)
 - [requirements.txt](./requirements.txt)
 
-当前 `Dockerfile` 使用：
+The current `Dockerfile` uses:
 
 - `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`
 
-注意：
+Notes:
 
-- 它是项目基础镜像，不是“一切都帮你配好”的最终生产镜像
-- 容器里默认不安装 `torch`
-- 真正使用 GPU 还需要宿主机安装 NVIDIA 驱动和 `NVIDIA Container Toolkit`
+- it is a base project image, not a fully configured production image
+- `torch` is not installed by default inside the container
+- real GPU usage still requires NVIDIA drivers and NVIDIA Container Toolkit on the host
 
-## 项目结构
+## Project Structure
 
-如果你想继续改这个项目，可以先看这几份文档：
+If you want to continue developing this project, start with:
 
-- [PRD.md](./PRD.md)：产品需求文档
-- [DOC_TREE.md](./DOC_TREE.md)：目录结构和每个文件干什么
-- [TASK.md](./TASK.md)：开发任务清单
+- [PRD.md](./PRD.md): product requirements document
+- [DOC_TREE.md](./DOC_TREE.md): directory structure and file responsibilities
+- [TASK.md](./TASK.md): development task list
 
-## 当前状态
+## Current Status
 
-当前仓库已经包含第一版：
+The repository currently includes the first version of:
 
-- 文档
-- 配置样例
-- 环境检查
-- 压力测试
-- 通信测试
-- `tmux` 调度
-- watchdog 守护
-- 示例任务
-- 基础单元测试
+- documentation
+- example configs
+- environment checks
+- stress tests
+- communication tests
+- `tmux` scheduling
+- watchdog supervision
+- example tasks
+- basic unit tests
 
-基础单元测试已通过。
+Basic unit tests have passed.
 
-但要说明白一件事：
+However, these still need to be verified on the target Linux + NVIDIA machine:
 
-- 真实 GPU 压测
-- 真实 NCCL 多卡通信
-- 真实 `tmux` 后台守护行为
+- real GPU stress tests
+- real NCCL multi-GPU communication
+- real `tmux` background watchdog behavior
 
-这些仍然需要你在目标 Linux + NVIDIA 机器上实际跑一遍确认。
+## Common Notes
 
-## 常见注意事项
+### 1. Why `requirements.txt` Does Not Include `torch`
 
-### 1. 为什么 `requirements.txt` 里没有 `torch`
+PyTorch is tightly coupled to CUDA versions. Pinning it directly would easily cause installation conflicts on other machines.
 
-因为 PyTorch 和 CUDA 强绑定，直接写死很容易让别人一装就冲突。
+### 2. Why "Someone Else Is Using the GPU" Only Checks GPU Utilization
 
-### 2. 为什么判断“别人是否在用卡”只看 GPU 利用率
+This is a lightweight first-version strategy. It is practical, but it can misjudge some cases. A later version could combine utilization and memory-usage thresholds.
 
-这是第一版的简化策略，足够轻量，但确实可能误判。后面可以继续扩展成“利用率 + 显存占用”双判断。
+### 3. Will This Project Preempt Other Users' GPUs?
 
-### 3. 这个项目会不会抢占别人的卡
+No. The design goal is the opposite: avoid aggressively taking resources in shared environments.
 
-它的设计目标正好相反，是尽量不要在共享环境里粗暴抢占资源。
+## Possible Future Extensions
 
-## 后续可以怎么扩展
+Natural next steps for a second version include:
 
-如果你准备继续做第二版，比较自然的方向有：
+- add a GPU memory-usage threshold
+- add retry limits after failures
+- add alerts
+- add clearer task status display
+- add a simple TUI or web panel
 
-- 增加显存占用阈值判断
-- 增加失败重试次数限制
-- 增加告警
-- 增加更清晰的任务状态展示
-- 增加简单 TUI / Web 面板
+## License
 
-## 许可证
-
-当前仓库还没有单独添加 LICENSE 文件。你如果需要，我可以下一步继续补。
+This repository does not currently include a separate LICENSE file.
